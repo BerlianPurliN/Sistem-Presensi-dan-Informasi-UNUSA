@@ -132,19 +132,52 @@
        * @returns {string} CSV content
        */
       const arrayToCsv = (data) => {
-        const header = ["Waktu Presensi", "Nama Lengkap", "ID Pengguna"];
-        const rows = data.map((item) => [
-          new Date(item.timestamp).toLocaleString("id-ID"),
-          item.name.replace(/"/g, '""'), // Escape quotes
-          item.userId,
-        ]);
+        // PERUBAHAN 1: Definisikan pemisah sebagai TITIK KOMA (;)
+        const DELIMITER = ";";
 
+        // Byte Order Mark (BOM) untuk memastikan Excel memproses UTF-8 dengan benar
+        // Ini membantu Excel yang disetel ke locale selain en-US mengenali encoding dan delimiter.
+        const BOM = "\uFEFF"; // Kunci untuk memperbaiki pembukaan di banyak versi Excel
+
+        const header = [
+          "Tanggal Presensi",
+          "Waktu Presensi",
+          "Hari",
+          "Nama Lengkap",
+          "ID Pengguna",
+        ];
+
+        const rows = data.map((item) => {
+          const dateObj = new Date(item.timestamp);
+
+          // Format Waktu
+          const datePart = dateObj.toLocaleDateString("id-ID");
+          const timePart = dateObj.toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+          const dayPart = dateObj.toLocaleDateString("id-ID", {
+            weekday: "long",
+          });
+
+          // Amankan nama dari tanda kutip
+          const safeName = item.name.replace(/"/g, '""');
+
+          return [datePart, timePart, dayPart, safeName, item.userId];
+        });
+
+        // 2. Buat Konten CSV
+        // PERUBAHAN 2: Tambahkan BOM dan gunakan DELIMITER (;)
         const csvContent = [
-          header.join(","),
-          ...rows.map((row) => row.map((field) => `"${field}"`).join(",")),
+          header.join(DELIMITER),
+          ...rows.map((row) =>
+            row.map((field) => `"${field}"`).join(DELIMITER)
+          ),
         ].join("\n");
 
-        return csvContent;
+        // PREPEND BOM ke konten akhir
+        return BOM + csvContent;
       };
 
       /**
