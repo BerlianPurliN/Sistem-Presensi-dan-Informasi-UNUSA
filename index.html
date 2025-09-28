@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistem Presensi & Informasi</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              // Palet Warna yang lebih modern
+              primary: "#4F46E5", // Indigo-600
+              secondary: "#FBBF24", // Amber-400 (untuk aksen dan tombol download)
+              background: "#F3F4F6", // Gray-100 (latar belakang body yang lebih kontras)
+            },
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+            boxShadow: {
+              soft: "0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02)",
+              lifted: "0 25px 50px -12px rgba(0, 0, 0, 0.08)",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      /* Custom styles for better aesthetics and table styling */
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f3f4f6; /* background */
+      }
+      /* Style untuk tombol tab yang aktif */
+      .tab-button.active {
+        background-color: #4f46e5; /* primary - Indigo */
+        color: white;
+        box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4); /* Shadow yang lebih halus */
+      }
+      /* Style untuk tombol tab saat tidak aktif dan hover */
+      .tab-button {
+        transition: all 0.3s ease;
+      }
+      .tab-button:not(.active):hover {
+        background-color: #e5e7eb; /* Gray-200 */
+        color: #374151; /* Gray-700 */
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+      /* Style for the responsive table */
+      .schedule-table-container {
+        overflow-x: auto;
+        max-width: 100%;
+      }
+      .schedule-table th,
+      .schedule-table td {
+        padding: 14px 18px; /* Padding lebih besar */
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb; /* Gray-200 */
+      }
+      .schedule-table th {
+        background-color: #4f46e5; /* primary - Indigo */
+        color: white;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .schedule-table tr:nth-child(odd) {
+        background-color: #ffffff; /* White for stripes */
+      }
+      .schedule-table tr:nth-child(even) {
+        background-color: #f9fafb; /* Gray-50 for subtle stripe */
+      }
+      .schedule-table tr:hover {
+        background-color: #eff6ff; /* Blue-50 subtle hover */
+        transition: background-color 0.2s;
+      }
+    </style>
+
+    <!-- Firebase SDK Imports -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+      import {
+        getAuth,
+        signInAnonymously,
+        signInWithCustomToken,
+        onAuthStateChanged,
+      } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+      import {
+        getFirestore,
+        doc,
+        collection,
+        query,
+        onSnapshot,
+        addDoc,
+        serverTimestamp,
+        setLogLevel,
+      } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+      // Atur level log untuk melihat pesan debug Firebase
+      setLogLevel("debug");
+
+      // Global variables (will be populated on window load)
+      let app, db, auth;
+      let userId = null;
+      const PRESENCE_COLLECTION_NAME = "presences";
+
+      // Get global variables provided by the Canvas environment
+      const appId =
+        typeof __app_id !== "undefined" ? __app_id : "default-app-id";
+      const firebaseConfig =
+        typeof __firebase_config !== "undefined"
+          ? JSON.parse(__firebase_config)
+          : null;
+      // Variabel token otentikasi
+      const initialAuthToken =
+        typeof __initial_auth_token !== "undefined"
+          ? __initial_auth_token
+          : null;
+
+      /**
+       * Converts array of presence data to CSV string.
+       * @param {Array<Object>} data
+       * @returns {string} CSV content
+       */
+      const arrayToCsv = (data) => {
+        const header = ["Waktu Presensi", "Nama Lengkap", "ID Pengguna"];
+        const rows = data.map((item) => [
+          new Date(item.timestamp).toLocaleString("id-ID"),
+          item.name.replace(/"/g, '""'), // Escape quotes
+          item.userId,
+        ]);
+
+        const csvContent = [
+          header.join(","),
+          ...rows.map((row) => row.map((field) => `"${field}"`).join(",")),
+        ].join("\n");
+
+        return csvContent;
+      };
+
+      /**
+       * Triggers the download of the presence list as a CSV file.
+       * @param {Array<Object>} presences
+       */
+      window.downloadPresences = (presences) => {
+        if (presences.length === 0) {
+          showMessage("Tidak ada data presensi untuk diunduh.", "warning");
+          return;
+        }
+
+        try {
+          const csvString = arrayToCsv(presences);
+          const blob = new Blob([csvString], {
+            type: "text/csv;charset=utf-8;",
+          });
+          const link = document.createElement("a");
+          const url = URL.createObjectURL(blob);
+
+          link.setAttribute("href", url);
+          link.setAttribute(
+            "download",
+            `rekap_presensi_${new Date().toISOString().slice(0, 10)}.csv`
+          );
+
+          // Append to body, click, and remove
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          showMessage("Rekap presensi berhasil diunduh.", "success");
+        } catch (error) {
+          console.error("Error saat mengunduh CSV:", error);
+          showMessage(
+            "Gagal mengunduh file. Lihat konsol untuk detail.",
+            "error"
+          );
+        }
+      };
+
+      /**
+       * Displays a message box on the screen.
+       * @param {string} message - The message content.
+       * @param {'success'|'error'|'warning'|'info'} type - Message type for styling.
+       */
+      const showMessage = (message, type = "info") => {
+        const messageBox = document.getElementById("message-box");
+        let bgColor;
+        let textColor;
+        let icon;
+
+        switch (type) {
+          case "success":
+            bgColor = "bg-green-50 border-green-200";
+            textColor = "text-green-800";
+            icon = `<svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>`;
+            break;
+          case "error":
+            bgColor = "bg-red-50 border-red-200";
+            textColor = "text-red-800";
+            icon = `<svg class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>`;
+            break;
+          case "warning":
+            bgColor = "bg-yellow-50 border-yellow-200";
+            textColor = "text-yellow-800";
+            icon = `<svg class="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.365 2.766-1.365 3.531 0l4.735 8.442c.767 1.366-.26 3.059-1.765 3.059H5.287c-1.505 0-2.532-1.693-1.765-3.059l4.735-8.442zM10 13a1 1 0 100-2 1 1 0 000 2zm-1-4a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clip-rule="evenodd"></path></svg>`;
+            break;
+          case "info":
+          default:
+            bgColor = "bg-blue-50 border-blue-200";
+            textColor = "text-blue-800";
+            icon = `<svg class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2h1a1 1 0 001-1V7a1 1 0 10-2 0v2z" clip-rule="evenodd"></path></svg>`;
+            break;
+        }
+
+        messageBox.innerHTML = `<div class="flex items-start"><div class="flex-shrink-0 mr-3">${icon}</div><div class="text-sm font-medium">${message}</div></div>`;
+        messageBox.className = `p-4 mt-4 rounded-xl border-l-4 shadow-lg ${bgColor} ${textColor} transition-all duration-300 transform`;
+        messageBox.style.opacity = "1";
+        messageBox.style.transform = "translateY(0)";
+
+        // Hide after 5 seconds
+        setTimeout(() => {
+          messageBox.style.opacity = "0";
+          messageBox.style.transform = "translateY(-10px)";
+          setTimeout(() => {
+            messageBox.className = "hidden";
+          }, 300);
+        }, 5000);
+      };
+      window.showMessage = showMessage; // Make it globally accessible
+
+      /**
+       * Initializes Firebase and sets up authentication.
+       */
+      const initializeFirebase = async () => {
+        if (!firebaseConfig) {
+          showMessage(
+            "Kesalahan Konfigurasi: Firebase Config tidak ditemukan.",
+            "error"
+          );
+          return;
+        }
+        try {
+          app = initializeApp(firebaseConfig);
+          db = getFirestore(app);
+          auth = getAuth(app);
+
+          // Authentication
+          // Menggunakan initialAuthToken yang sudah dikoreksi namanya
+          if (initialAuthToken) {
+            await signInWithCustomToken(auth, initialAuthToken);
+          } else {
+            // Fallback to anonymous sign-in if no token is provided
+            await signInAnonymously(auth);
+          }
+
+          // Listen for Auth state changes
+          onAuthStateChanged(auth, (user) => {
+            const statusEl = document.getElementById("auth-status");
+            if (user) {
+              userId = user.uid;
+              // Menampilkan 8 karakter pertama dari ID untuk keringkasan
+              statusEl.innerHTML = `<span class="text-green-600">Terhubung</span> | ID Sesi: ${userId.substring(
+                0,
+                8
+              )}...`;
+            } else {
+              userId = crypto.randomUUID(); // Use a random ID if unauthenticated
+              statusEl.innerHTML = `<span class="text-red-500">Anonim</span> | ID Sesi: ${userId.substring(
+                0,
+                8
+              )}...`;
+            }
+            startPresenceListener(); // Start listener after user ID is set
+          });
+        } catch (error) {
+          console.error("Kesalahan inisialisasi Firebase:", error);
+          showMessage(
+            `Gagal menginisialisasi Firebase: ${error.message}`,
+            "error"
+          );
+        }
+      };
+
+      /**
+       * Handles real-time listening for presence data from Firestore.
+       */
+      const startPresenceListener = () => {
+        if (!db || !userId) return;
+
+        // Use the public data path for shared presences
+        // Path: /artifacts/{appId}/public/data/presences
+        const presencesRef = collection(
+          db,
+          "artifacts",
+          appId,
+          "public",
+          "data",
+          PRESENCE_COLLECTION_NAME
+        );
+
+        // Query for real-time updates
+        const q = query(presencesRef);
+
+        onSnapshot(
+          q,
+          (snapshot) => {
+            const presenceListEl = document.getElementById("presence-list");
+            const presenceData = [];
+            presenceListEl.innerHTML = "";
+
+            snapshot.forEach((doc) => {
+              const data = doc.data();
+
+              const name = data.name || "Nama Tidak Diketahui";
+              // Convert Firebase Timestamp to Date and then get epoch time for sorting
+              const timestamp = data.timestamp
+                ? data.timestamp.toDate().getTime()
+                : Date.now();
+              const formattedTime = new Date(timestamp).toLocaleTimeString(
+                "id-ID",
+                { hour: "2-digit", minute: "2-digit" }
+              );
+
+              presenceData.push({
+                ...data,
+                timestamp: timestamp,
+                id: doc.id,
+              });
+
+              // Render list item
+              const li = document.createElement("li");
+              li.className =
+                "p-3 flex justify-between items-center bg-white border border-gray-100 rounded-lg mb-2 transition duration-150 hover:shadow-md hover:border-primary";
+              li.innerHTML = `
+                        <span class="font-medium text-gray-800">${name}</span>
+                        <span class="text-xs font-mono text-gray-500">${formattedTime}</span>
+                    `;
+              presenceListEl.appendChild(li);
+            });
+
+            // Sort data by timestamp descending (terbaru di atas) for the list and CSV download
+            const sortedPresenceData = presenceData.sort(
+              (a, b) => b.timestamp - a.timestamp
+            );
+
+            // Re-render list based on sorted data (optional, since Firestore listener doesn't guarantee order if no orderBy is used)
+            presenceListEl.innerHTML = "";
+            sortedPresenceData.forEach((data) => {
+              const formattedTime = new Date(data.timestamp).toLocaleTimeString(
+                "id-ID",
+                { hour: "2-digit", minute: "2-digit" }
+              );
+              const li = document.createElement("li");
+              li.className =
+                "p-3 flex justify-between items-center bg-white border border-gray-100 rounded-lg mb-2 transition duration-150 hover:shadow-md hover:border-primary";
+              li.innerHTML = `
+                        <span class="font-medium text-gray-800">${
+                          data.name || "Nama Tidak Diketahui"
+                        }</span>
+                        <span class="text-xs font-mono text-gray-500">${formattedTime}</span>
+                    `;
+              presenceListEl.appendChild(li);
+            });
+
+            // Update the download button handler with the current data
+            const downloadBtn = document.getElementById("download-csv-btn");
+            if (downloadBtn) {
+              downloadBtn.onclick = () =>
+                window.downloadPresences(sortedPresenceData);
+            }
+
+            const totalEl = document.getElementById("total-presensi");
+            if (totalEl) {
+              totalEl.textContent = `Total Presensi: ${presenceData.length}`;
+            }
+          },
+          (error) => {
+            console.error("Kesalahan mendengarkan presensi:", error);
+            showMessage(`Gagal memuat rekap presensi.`, "error");
+          }
+        );
+      };
+
+      /**
+       * Handles the form submission for presence.
+       */
+      window.handlePresence = async () => {
+        const nameInput = document.getElementById("full-name");
+        const fullName = nameInput.value.trim();
+        const presensiBtn = document.getElementById("presensi-btn");
+
+        if (!fullName) {
+          showMessage("Nama Lengkap tidak boleh kosong.", "warning");
+          nameInput.focus();
+          return;
+        }
+
+        // Check session storage to prevent double submission in the current browser session
+        if (sessionStorage.getItem("hasPresenced")) {
+          showMessage(
+            "Anda sudah melakukan presensi pada sesi ini.",
+            "warning"
+          );
+          return;
+        }
+
+        if (!db || !userId) {
+          showMessage(
+            "Sistem belum siap. Coba lagi dalam beberapa saat.",
+            "error"
+          );
+          return;
+        }
+
+        // Disable button during submission
+        presensiBtn.disabled = true;
+        presensiBtn.textContent = "Memproses...";
+
+        try {
+          const presencesRef = collection(
+            db,
+            "artifacts",
+            appId,
+            "public",
+            "data",
+            PRESENCE_COLLECTION_NAME
+          );
+
+          // Add document to Firestore
+          await addDoc(presencesRef, {
+            name: fullName,
+            userId: userId, // User ID from Firebase auth
+            timestamp: serverTimestamp(), // Use server timestamp for reliable time
+          });
+
+          // Mark session as presenced
+          sessionStorage.setItem("hasPresenced", "true");
+
+          showMessage("Presensi berhasil! Data Anda sudah terekam.", "success");
+          nameInput.value = ""; // Clear input
+
+          // Slight delay to ensure Firebase listener catches up before switching
+          setTimeout(() => {
+            document.getElementById("tab-rekap").click(); // Switch to recap page
+          }, 300);
+        } catch (error) {
+          console.error("Kesalahan presensi:", error);
+          showMessage(`Gagal presensi: ${error.message}`, "error");
+          sessionStorage.removeItem("hasPresenced"); // Allow retry on error
+        } finally {
+          // Re-enable button
+          presensiBtn.disabled = false;
+          presensiBtn.textContent = "Presensi";
+        }
+      };
+
+      // Initialize Firebase on window load
+      window.onload = initializeFirebase;
+    </script>
+  </head>
+  <body class="min-h-screen p-4 sm:p-8 bg-background">
+    <div
+      class="max-w-4xl mx-auto bg-white rounded-3xl shadow-lifted p-6 sm:p-10"
+    >
+      <header class="text-center mb-8 pb-4 border-b border-gray-200">
+        <h1 class="text-4xl font-extrabold text-primary mb-1">
+          Sistem Informasi PBM
+        </h1>
+        <p class="text-xl text-gray-500">Jalur Afirmasi Angkatan 2025</p>
+        <p id="auth-status" class="text-sm mt-3 font-mono text-gray-500">
+          Memuat status sesi...
+        </p>
+      </header>
+
+      <!-- Message Box -->
+      <div
+        id="message-box"
+        class="hidden p-4 mt-4 rounded-xl shadow-soft opacity-0 transition-all duration-300 transform -translate-y-2"
+        role="alert"
+      ></div>
+
+      <!-- Navigation Tabs -->
+      <nav
+        class="flex flex-wrap justify-center space-x-1 sm:space-x-3 mb-8"
+        role="tablist"
+      >
+        <!-- Updated Tab Styles -->
+        <button
+          id="tab-home"
+          class="tab-button active px-4 py-2 sm:px-6 sm:py-3 rounded-full text-sm font-semibold text-white bg-primary transition duration-300 shadow-soft"
+          onclick="switchTab('home')"
+          role="tab"
+        >
+          Home (Presensi)
+        </button>
+        <button
+          id="tab-jadwal"
+          class="tab-button px-4 py-2 sm:px-6 sm:py-3 rounded-full text-sm font-semibold text-gray-700 bg-gray-200 transition duration-300"
+          onclick="switchTab('jadwal')"
+          role="tab"
+        >
+          Menu 1 (Jadwal)
+        </button>
+        <button
+          id="tab-link"
+          class="tab-button px-4 py-2 sm:px-6 sm:py-3 rounded-full text-sm font-semibold text-gray-700 bg-gray-200 transition duration-300"
+          onclick="switchTab('link')"
+          role="tab"
+        >
+          Menu 2 (Tautan)
+        </button>
+        <button
+          id="tab-rekap"
+          class="tab-button px-4 py-2 sm:px-6 sm:py-3 rounded-full text-sm font-semibold text-gray-700 bg-gray-200 transition duration-300"
+          onclick="switchTab('rekap')"
+          role="tab"
+        >
+          Rekap Presensi
+        </button>
+      </nav>
+
+      <!-- Tab Content Containers -->
+      <div id="content-container">
+        <!-- 1. Homepage (Presensi) -->
+        <div
+          id="content-home"
+          class="tab-content active p-6 sm:p-8 border border-gray-100 rounded-2xl shadow-soft bg-white"
+          role="tabpanel"
+        >
+          <h2
+            class="text-2xl font-bold text-primary mb-6 border-b border-gray-100 pb-3"
+          >
+            Formulir Presensi Kehadiran
+          </h2>
+          <form
+            onsubmit="event.preventDefault(); handlePresence();"
+            class="space-y-6"
+          >
+            <div>
+              <label
+                for="full-name"
+                class="block text-sm font-medium text-gray-700 mb-2"
+                >Nama Lengkap</label
+              >
+              <input
+                type="text"
+                id="full-name"
+                name="full-name"
+                placeholder="Masukkan nama lengkap Anda di sini"
+                required
+                class="block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-primary focus:border-primary text-gray-900 transition duration-200"
+              />
+            </div>
+            <button
+              type="submit"
+              id="presensi-btn"
+              class="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-lg font-semibold text-white bg-primary hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-primary focus:ring-opacity-50 transition duration-200 transform hover:scale-[1.005]"
+            >
+              Presensi
+            </button>
+            <p class="text-center text-xs text-gray-400 pt-2">
+              Presensi hanya bisa dilakukan 1x per sesi browser.
+            </p>
+          </form>
+        </div>
+
+        <!-- 2. Page Menu 1 (Jadwal) -->
+        <div id="content-jadwal" class="tab-content" role="tabpanel">
+          <h2
+            class="text-2xl font-bold text-primary mb-6 border-b border-gray-100 pb-3"
+          >
+            Jadwal Perkuliahan
+          </h2>
+          <p class="text-gray-600 mb-6">
+            JADWAL PERKULIAHAN JALUR AFIRMASI ANGKATAN 2025 PRODI S1 PGPAUD FKIP
+            UNUSA
+          </p>
+
+          <div class="schedule-table-container">
+            <table
+              class="schedule-table w-full border-collapse rounded-2xl overflow-hidden shadow-soft"
+            >
+              <thead>
+                <tr>
+                  <th class="w-1/4">Mata Kuliah</th>
+                  <th class="w-1/4">Kelas C1</th>
+                  <th class="w-1/4">Kelas C2</th>
+                  <th class="w-1/4">Kelas C3</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data from the uploaded PDF -->
+                <tr>
+                  <td>KONSEP DASAR PAUD 2 SKS (PJMK DESTITA)</td>
+                  <td>SYAIKHON (SENIN, 17.00-18.40 WIB)</td>
+                  <td>
+                    NANANG (PERTEMUAN 1-7 SENIN, 11.00-12.40 WIB LALU PERTEMUAN
+                    8-14 SENIN, 15.00-16.40 WIB)
+                  </td>
+                  <td>NANANG (SENIN, 17.00-18.40 WIB)</td>
+                </tr>
+                <tr>
+                  <td>PSIKOLOGI PERKEMBANGAN ANAK 3 SKS (PJMK MACHMUDAH)</td>
+                  <td>MACHMUDAH (SENIN, 12.30-15.00 WIB)</td>
+                  <td>
+                    MACHMUDAH (PERTEMUAN 1-7 SELASA, 15.00-17.30 WIB LALU
+                    PERTEMUAN 8-14 SELASA, 17.30-20.00 WIB)
+                  </td>
+                  <td>FIFI (RABU, 14.00-16.30 WIB)</td>
+                </tr>
+                <tr>
+                  <td>
+                    PENG. KOGNITIF DAN KREATIVITAS 3 SKS (PJMK JAUHAROTUR)
+                  </td>
+                  <td>JAUHAROTUR (SELASA, 12.00-14.30 WIB)</td>
+                  <td>
+                    JAUHAROTUR (PERTEMUAN 1-7 SELASA, 18.00-20.30 WIB LALU
+                    PERTEMUAN 8-14 SENIN, 11.00-13.30 WIB)
+                  </td>
+                  <td>
+                    MACHMUDAH (PERTEMUAN 1-13 JUMAT, 15.00-17.30 WIB LALU
+                    PERTEMUAN 14 JUMAT 17.00-19.30 WIB)
+                  </td>
+                </tr>
+                <tr>
+                  <td>PENG. SOSIAL EMOSIONAL AUD 3 SKS(PJMK ANDINI)</td>
+                  <td>ANDINI (SELASA, 15.00-17.30 WIB)</td>
+                  <td>ANDINI (RABU, 15.00-17.30 WIB)</td>
+                  <td>
+                    SYAIKHON (PERTEMUAN1-7 RABU, 16.40-19.10 WIB LALU PERTEMUAN
+                    8-14 SELASA, 12.00-14.30 WIB)
+                  </td>
+                </tr>
+                <tr>
+                  <td>PENG. FISIK MOTORIK AUD 3 SKS (PJMK ANDINI)</td>
+                  <td>ANDINI (KAMIS, 13.02-15.32 WIB)</td>
+                  <td>DESTITA (RABU, 18.00-20.30 WIB)</td>
+                  <td>DESTITA (SELASA, 17.00-19.30 WIB)</td>
+                </tr>
+                <tr>
+                  <td>BERMAIN DAN PERMAINAN AUD 3SKS (PJMK BERDA)</td>
+                  <td>BERDA (RABU, 18.00-20.30 WIB)</td>
+                  <td>BERDA (RABU, 12.00-14.30 WIB)</td>
+                  <td>BERDA (JUMAT, 12.20-14.50 WIB)</td>
+                </tr>
+                <tr>
+                  <td>PERENCANAAN PEMBELAJARAN AUD 3 SKS (PJMK DESTITA)</td>
+                  <td>DESTITA (RABU, 12.00-14.30 WIB)</td>
+                  <td>DESTITA (SENIN, 17.00-19.30 WIB)</td>
+                  <td>NAFIAH (SENIN 12.00-14.30 WIB)</td>
+                </tr>
+                <tr>
+                  <td>EVALUASI PEMBELAJARAN 3 SKS (PJMK JAUHAROTUR)</td>
+                  <td>JAUHAROTUR (JUMAT 11.00-13.30 WIB)</td>
+                  <td>JAUHAROTUR (JUMAT, 13.40-16.10 WIB)</td>
+                  <td>
+                    THAMRIN (PERTEMUAN 1-7 SELASA, 11.00-13.30 WIB LALU
+                    PERTEMUAN 8-14 RABU, 11.00-13.30 WIB)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="mt-6 text-sm text-gray-500">
+            Catatan: Jadwal ini disajikan berdasarkan file PDF SK BKD PBM Ganjil
+            September 2025-1.
+          </p>
+        </div>
+
+        <!-- 3. Page Menu 2 (Tautan) -->
+        <div
+          id="content-link"
+          class="tab-content p-6 sm:p-8 border border-gray-100 rounded-2xl shadow-soft bg-white"
+          role="tabpanel"
+        >
+          <h2
+            class="text-2xl font-bold text-primary mb-6 border-b border-gray-100 pb-3"
+          >
+            Menu Tautan Penting
+          </h2>
+          <p class="text-gray-600 mb-6">
+            Silakan klik tautan di bawah ini untuk mengakses materi dan
+            pertemuan.
+          </p>
+
+          <div class="space-y-4">
+            <!-- Link Zoom -->
+            <a
+              href="https://example.com/zoom"
+              target="_blank"
+              class="block p-4 bg-white border border-gray-200 rounded-xl shadow-soft hover:shadow-lg transition duration-200 group hover:border-blue-400"
+            >
+              <p
+                class="text-lg font-semibold text-blue-600 group-hover:text-blue-800 flex items-center"
+              >
+                <svg
+                  class="w-6 h-6 mr-3 text-blue-500 transition duration-150 group-hover:scale-105"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 10l4.55 4.55a.5.5 0 010 .7L15 20m-6-10l-4.55 4.55a.5.5 0 000 .7L9 20m1-10v8a2 2 0 002 2h4a2 2 0 002-2V9a2 2 0 00-2-2H9a2 2 0 00-2 2v8"
+                  ></path>
+                </svg>
+                Link Zoom
+              </p>
+              <p class="text-sm text-gray-500 mt-1 pl-9">
+                Ganti dengan URL Pertemuan Zoom yang Valid
+              </p>
+            </a>
+            <!-- Link Drive Rekaman -->
+            <a
+              href="https://example.com/drive-rekaman"
+              target="_blank"
+              class="block p-4 bg-white border border-gray-200 rounded-xl shadow-soft hover:shadow-lg transition duration-200 group hover:border-yellow-400"
+            >
+              <p
+                class="text-lg font-semibold text-yellow-600 group-hover:text-yellow-800 flex items-center"
+              >
+                <svg
+                  class="w-6 h-6 mr-3 text-yellow-500 transition duration-150 group-hover:scale-105"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  ></path>
+                </svg>
+                Link Drive Rekaman
+              </p>
+              <p class="text-sm text-gray-500 mt-1 pl-9">
+                Ganti dengan URL Folder Google Drive Rekaman
+              </p>
+            </a>
+            <!-- Link Upload SS -->
+            <a
+              href="https://example.com/upload-ss"
+              target="_blank"
+              class="block p-4 bg-white border border-gray-200 rounded-xl shadow-soft hover:shadow-lg transition duration-200 group hover:border-green-400"
+            >
+              <p
+                class="text-lg font-semibold text-green-600 group-hover:text-green-800 flex items-center"
+              >
+                <svg
+                  class="w-6 h-6 mr-3 text-green-500 transition duration-150 group-hover:scale-105"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                  ></path>
+                </svg>
+                Link Upload Hasil Tangkap Layar (SS/Screenshoot)
+              </p>
+              <p class="text-sm text-gray-500 mt-1 pl-9">
+                Ganti dengan URL Form/Tempat Upload Tangkap Layar
+              </p>
+            </a>
+          </div>
+        </div>
+
+        <!-- 4. Rekap Presensi -->
+        <div id="content-rekap" class="tab-content" role="tabpanel">
+          <h2
+            class="text-2xl font-bold text-primary mb-6 border-b border-gray-100 pb-3"
+          >
+            Rekap Daftar Presensi
+          </h2>
+
+          <div
+            class="flex flex-col sm:flex-row justify-between items-center mb-6 space-y-3 sm:space-y-0 p-6 sm:p-8 border border-gray-100 rounded-2xl shadow-soft bg-white"
+          >
+            <p id="total-presensi" class="text-xl font-bold text-gray-700">
+              Total Presensi: 0
+            </p>
+            <button
+              id="download-csv-btn"
+              onclick="downloadPresences([])"
+              class="flex items-center px-5 py-2 bg-secondary text-gray-900 font-semibold rounded-xl shadow-md hover:bg-yellow-500 focus:outline-none focus:ring-4 focus:ring-secondary focus:ring-opacity-50 transition duration-200 transform hover:scale-[1.02]"
+            >
+              <svg
+                class="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                ></path>
+              </svg>
+              Unduh Rekap (.csv)
+            </button>
+          </div>
+
+          <div
+            class="bg-gray-50 p-4 rounded-xl shadow-inner max-h-96 overflow-y-auto border border-gray-200 mt-4"
+          >
+            <ul id="presence-list" class="space-y-2">
+              <!-- Presensi data will be inserted here by Firebase listener -->
+              <p class="text-center text-gray-500">Memuat data presensi...</p>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JavaScript for Tab Switching -->
+    <script>
+      /**
+       * Function to switch between content tabs.
+       * @param {string} tabId - ID of the tab content to show (e.g., 'home', 'jadwal').
+       */
+      function switchTab(tabId) {
+        // Remove 'active' class from all buttons and content
+        document.querySelectorAll(".tab-button").forEach((btn) => {
+          btn.classList.remove(
+            "active",
+            "text-white",
+            "bg-primary",
+            "shadow-soft"
+          );
+          btn.classList.add("text-gray-700", "bg-gray-200");
+        });
+
+        document.querySelectorAll(".tab-content").forEach((content) => {
+          content.classList.remove("active");
+        });
+
+        // Add 'active' class to the selected button and content
+        const activeBtn = document.getElementById(`tab-${tabId}`);
+        const activeContent = document.getElementById(`content-${tabId}`);
+
+        if (activeBtn) {
+          activeBtn.classList.add(
+            "active",
+            "text-white",
+            "bg-primary",
+            "shadow-soft"
+          );
+          activeBtn.classList.remove("text-gray-700", "bg-gray-200");
+        }
+        if (activeContent) {
+          activeContent.classList.add("active");
+        }
+
+        // If switching to home, check if already presenced
+        if (tabId === "home") {
+          const nameInput = document.getElementById("full-name");
+          const presensiBtn = document.getElementById("presensi-btn");
+          if (sessionStorage.getItem("hasPresenced")) {
+            nameInput.placeholder = "Anda sudah presensi";
+            nameInput.disabled = true;
+            presensiBtn.disabled = true;
+            presensiBtn.textContent = "Sudah Presensi";
+          } else {
+            nameInput.placeholder = "Masukkan nama lengkap Anda di sini";
+            nameInput.disabled = false;
+            presensiBtn.disabled = false;
+            presensiBtn.textContent = "Presensi";
+          }
+        }
+
+        // Minor adjustment for rekap content to apply consistent padding/border
+        if (tabId === "rekap") {
+          const rekapContent = document.getElementById("content-rekap");
+          if (rekapContent) {
+            rekapContent.classList.add(
+              "p-0",
+              "sm:p-0",
+              "border-0",
+              "shadow-none",
+              "bg-transparent"
+            );
+          }
+        } else {
+          const otherContents = ["content-home", "content-link"];
+          otherContents.forEach((id) => {
+            const content = document.getElementById(id);
+            if (content) {
+              content.classList.remove(
+                "p-0",
+                "sm:p-0",
+                "border-0",
+                "shadow-none",
+                "bg-transparent"
+              );
+              content.classList.add(
+                "p-6",
+                "sm:p-8",
+                "border",
+                "border-gray-100",
+                "rounded-2xl",
+                "shadow-soft",
+                "bg-white"
+              );
+            }
+          });
+        }
+      }
+
+      // Initial check on load for home tab (in case the user navigates back)
+      window.addEventListener("load", () => {
+        switchTab("home");
+      });
+    </script>
+  </body>
+</html>
