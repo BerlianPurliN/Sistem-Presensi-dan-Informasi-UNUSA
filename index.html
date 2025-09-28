@@ -86,12 +86,14 @@
     <!-- Firebase SDK Imports -->
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+
       import {
         getAuth,
         signInAnonymously,
         signInWithCustomToken,
         onAuthStateChanged,
       } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
       import {
         getFirestore,
         doc,
@@ -106,23 +108,23 @@
       // Atur level log untuk melihat pesan debug Firebase
       setLogLevel("debug");
 
-      // Global variables (will be populated on window load)
       let app, db, auth;
       let userId = null;
       const PRESENCE_COLLECTION_NAME = "presences";
 
-      // Get global variables provided by the Canvas environment
-      const appId =
-        typeof __app_id !== "undefined" ? __app_id : "default-app-id";
-      const firebaseConfig =
-        typeof __firebase_config !== "undefined"
-          ? JSON.parse(__firebase_config)
-          : null;
-      // Variabel token otentikasi
-      const initialAuthToken =
-        typeof __initial_auth_token !== "undefined"
-          ? __initial_auth_token
-          : null;
+      const firebaseConfig = {
+        apiKey: "AIzaSyDW7aU4S5RVSgcsK_hVTm-1dV9cge-lTGY",
+        authDomain: "presensi-unusa-2025.firebaseapp.com",
+        projectId: "presensi-unusa-2025",
+        storageBucket: "presensi-unusa-2025.firebasestorage.app",
+        messagingSenderId: "78777892573",
+        appId: "1:78777892573:web:7c0d601c9fd37d37d52534",
+        measurementId: "G-5MVJSSZ02Y",
+      };
+
+      const appId = firebaseConfig?.appId;
+
+      const initialAuthToken = null;
 
       /**
        * Converts array of presence data to CSV string.
