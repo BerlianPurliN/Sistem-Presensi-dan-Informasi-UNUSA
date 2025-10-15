@@ -1,0 +1,53 @@
+/* Custom styles for better aesthetics and table styling */
+body {
+  font-family: "Inter", sans-serif;
+  background-color: #f3f4f6; /* background */
+}
+/* Style untuk tombol tab yang aktif */
+.tab-button.active {
+  background-color: #4f46e5; /* primary - Indigo */
+  color: white;
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4); /* Shadow yang lebih halus */
+}
+/* Style untuk tombol tab saat tidak aktif dan hover */
+.tab-button {
+  transition: all 0.3s ease;
+}
+.tab-button:not(.active):hover {
+  background-color: #e5e7eb; /* Gray-200 */
+  color: #374151; /* Gray-700 */
+}
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+}
+/* Style for the responsive table */
+.schedule-table-container {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.schedule-table th,
+.schedule-table td {
+  padding: 14px 18px; /* Padding lebih besar */
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb; /* Gray-200 */
+}
+.schedule-table th {
+  background-color: #4f46e5; /* primary - Indigo */
+  color: white;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.schedule-table tr:nth-child(odd) {
+  background-color: #ffffff; /* White for stripes */
+}
+.schedule-table tr:nth-child(even) {
+  background-color: #f9fafb; /* Gray-50 for subtle stripe */
+}
+.schedule-table tr:hover {
+  background-color: #eff6ff; /* Blue-50 subtle hover */
+  transition: background-color 0.2s;
+}
