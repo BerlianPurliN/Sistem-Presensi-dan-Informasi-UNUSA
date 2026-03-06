@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
@@ -46,7 +46,7 @@
         background-color: #e5e7eb; /* Gray-200 */
         color: #374151; /* Gray-700 */
       }
-      
+
       /* Style for the responsive table */
       .schedule-table-container {
         overflow-x: auto;
@@ -76,36 +76,41 @@
         transition: background-color 0.2s;
       }
     </style>
-    
   </head>
   <body class="min-h-screen p-4 sm:p-8 bg-background">
     <div
       class="max-w-4xl mx-auto bg-white rounded-3xl shadow-lifted p-6 sm:p-10"
     >
-  <header class="mb-8 pb-4 border-b border-gray-200 flex flex-col md:flex-row items-center relative">
-    <div class="flex-shrink-0 mb-4 md:mb-0 md:ml-6">
-      <img
-        src="logo.png"
-        alt="Logo UNUSA"
-        class="w-20"
-        style="width: 7rem;"
-      />
-    </div>
+      <header
+        class="mb-8 pb-4 border-b border-gray-200 flex flex-col md:flex-row items-center relative"
+      >
+        <div class="flex-shrink-0 mb-4 md:mb-0 md:ml-6">
+          <img
+            src="logo.png"
+            alt="Logo UNUSA"
+            class="w-20"
+            style="width: 7rem"
+          />
+        </div>
 
-    <div class="flex-grow text-center md:pr-26"> 
-      <h1 class="text-2xl md:text-4xl font-extrabold text-primary mb-1">
-        Sistem Informasi PBM
-      </h1>
-      <p class="text-lg md:text-xl text-gray-500">Jalur Afirmasi S1 PG PAUD Angkatan 2025</p>
-      <p class="text-lg md:text-xl text-gray-500">Fakultas Keguruan dan Ilmu Pendidikan</p>
-      <p class="text-lg md:text-xl text-gray-500">Universitas Nahdlatul Ulama Surabaya</p>
-    </div>
-  </header>
-
+        <div class="flex-grow text-center md:pr-26">
+          <h1 class="text-2xl md:text-4xl font-extrabold text-primary mb-1">
+            Sistem Informasi PBM
+          </h1>
+          <p class="text-lg md:text-xl text-gray-500">
+            Jalur Afirmasi S1 PG PAUD Angkatan 2025
+          </p>
+          <p class="text-lg md:text-xl text-gray-500">
+            Fakultas Keguruan dan Ilmu Pendidikan
+          </p>
+          <p class="text-lg md:text-xl text-gray-500">
+            Universitas Nahdlatul Ulama Surabaya
+          </p>
+        </div>
+      </header>
 
       <!-- Tab Content Containers -->
       <div id="content-container">
-        <!-- 3. Page Menu 2 (Tautan) -->
         <div
           id="content-link"
           class="tab-content p-6 sm:p-8 border border-gray-100 rounded-2xl shadow-soft bg-white"
@@ -118,11 +123,10 @@
           </h2>
           <a
             class="animate-pulse mb-10px0 inline-block text-blue-600 font-semibold hover:underline"
-            href="https://drive.google.com/file/d/1KzswOB3-O_0foQ_iezpKMvf-eGN4cc1N/view?usp=sharing"
+            href="https://docs.google.com/spreadsheets/d/e/2PACX-1vS0XNtBae5tpg2GPzx5PT7lxVETadQbRlZcsoH5HdGMzYZxVRhdk_vuzCie1EohLA/pubhtml?gid=130291625&single=true"
             target="_blank"
             >👉🏻 Lihat daftar pembagian peserta kelas, disini</a
           >
-          
 
           <p class="text-gray-600 mb-6">
             Silakan klik tautan di bawah ini untuk mengakses materi dan
@@ -220,9 +224,39 @@
               </p>
             </a>
 
+            <!-- Link Zoom C4 -->
+            <a
+              href="https://zoom.us/j/95232736853"
+              target="_blank"
+              class="block p-4 bg-white border border-gray-200 rounded-xl shadow-soft hover:shadow-lg transition duration-200 group hover:border-blue-400"
+            >
+              <p
+                class="text-lg font-semibold text-blue-600 group-hover:text-blue-800 flex items-center"
+              >
+                <svg
+                  class="w-6 h-6 mr-3 text-blue-500 transition duration-150 group-hover:scale-105"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 10l4.55 4.55a.5.5 0 010 .7L15 20m-6-10l-4.55 4.55a.5.5 0 000 .7L9 20m1-10v8a2 2 0 002 2h4a2 2 0 002-2V9a2 2 0 00-2-2H9a2 2 0 00-2 2v8"
+                  ></path>
+                </svg>
+                Link Zoom Kelas C4
+              </p>
+              <p class="text-sm text-gray-500 mt-1 pl-9">
+                Meeting ID: 95232736853
+              </p>
+            </a>
+
             <!-- Link Drive Rekaman -->
             <a
-              href="https://drive.google.com/folderview?id=1vfK8Eo_hD8rFCGk6pQxqMcSMP5QeMr4x"
+              href="https://drive.google.com/drive/folders/1dr5xr9jGh0fqDhaqAN9FoNTC2vOEuGS9?usp=sharing"
               target="_blank"
               class="block p-4 bg-white border border-gray-200 rounded-xl shadow-soft hover:shadow-lg transition duration-200 group hover:border-yellow-400"
             >
@@ -247,9 +281,10 @@
               </p>
               <p class="text-sm text-gray-500 mt-1 pl-9">*Folder per MK</p>
             </a>
+
             <!-- Link Upload SS -->
             <a
-              href="https://drive.google.com/folderview?id=1vlIRADs76P-1G9Sgvw-YWP_E5hsjEX31"
+              href="https://drive.google.com/drive/folders/1L4mW_BaVM6DLz2ANxM6e0zZDpf05oE5L?usp=sharing"
               target="_blank"
               class="block p-4 bg-white border border-gray-200 rounded-xl shadow-soft hover:shadow-lg transition duration-200 group hover:border-green-400"
             >
@@ -278,9 +313,7 @@
             </a>
           </div>
         </div>
-
       </div>
     </div>
-
   </body>
 </html>
